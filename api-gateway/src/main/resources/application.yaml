@@ -1,0 +1,120 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  # Gateway Configuration
+  cloud:
+    gateway:
+      # Enable service discovery integration
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-id: true
+
+      # Route Configuration
+      routes:
+        # Authentication Service Route
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/auth/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenish-rate: 10
+                redis-rate-limiter.burst-capacity: 20
+
+        # Checkout Service Route (Protected)
+        - id: checkout-service
+          uri: lb://checkout-service
+          predicates:
+            - Path=/api/checkout/**
+#
+
+        # User Service Route (Protected)
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+          filters:
+            - StripPrefix=2
+            - name: AuthFilter
+
+        # Product Service Route (Public for GET, Protected for POST/PUT/DELETE)
+        - id: product-service-public
+          uri: lb://product-service
+          predicates:
+            - Path=/api/products/**
+            - Method=GET
+          filters:
+            - StripPrefix=2
+
+        - id: product-service-protected
+          uri: lb://product-service
+          predicates:
+            - Path=/api/products/**
+            - Method=POST,PUT,DELETE
+          filters:
+            - StripPrefix=2
+            - name: AuthFilter
+
+      # Global CORS Configuration
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOrigins:
+              - "http://localhost:3000"
+              - "http://localhost:8080"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - DELETE
+              - OPTIONS
+            allowedHeaders: "*"
+            allowCredentials: true
+            maxAge: 3600
+
+# Eureka Configuration
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka/
+    fetch-registry: true
+    register-with-eureka: true
+  instance:
+    prefer-ip-address: true
+
+# JWT Configuration
+jwt:
+  secret: mySecretKey123456789012345678901234567890
+  expiration: 86400000  # 24 hours in milliseconds
+  refresh-expiration: 604800000  # 7 days in milliseconds
+
+# Redis Configuration (for rate limiting and session management)
+spring.data.redis:
+  host: localhost
+  port: 6379
+  password: # set if required
+  timeout: 2000ms
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,gateway
+  endpoint:
+    health:
+      show-details: always
+
+# Logging Configuration
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    org.springframework.security: DEBUG
+    root: INFO
